@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#202923"><meta name="description" content="FlamAI — a shared space to sketch, think, and create together.">
+  <title>FlamAI · Collaborative Canvas</title><link rel="stylesheet" href="/style.css">
+  <script src="/socket.io/socket.io.js" defer></script><script src="/main.js" type="module"></script>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/" aria-label="FlamAI home"><span class="brand-icon">f.</span> Flam<span>AI</span><small>CANVAS</small></a>
+    <div class="connection"><span id="status-dot"></span><span id="status" role="status">Connecting…</span></div>
+    <button id="share" class="primary">Copy room link ↗</button>
+  </header>
+  <main>
+    <section class="room-bar" aria-label="Room and collaborators">
+      <form id="room-form"><label>Name<input id="name" maxlength="32" required value="Guest" autocomplete="nickname"></label><label>Room<input id="room" pattern="[a-z0-9][a-z0-9_-]{0,39}" maxlength="40" required value="studio"></label><button type="submit" id="join">Join room</button></form>
+      <div class="people"><span class="eyebrow">IN THE STUDIO</span><ul id="users" aria-label="Online users"></ul></div>
+    </section>
+    <section class="workspace" aria-label="Drawing workspace">
+      <aside class="tools" aria-label="Drawing tools">
+        <span class="eyebrow">CREATE</span>
+        <div class="tool-grid" id="tools">
+          <button data-tool="brush" aria-pressed="true" title="Brush (B)"><span>✎</span>Brush</button>
+          <button data-tool="eraser" aria-pressed="false" title="Eraser (E)"><span>▱</span>Eraser</button>
+          <button data-tool="line" aria-pressed="false" title="Line (L)"><span>╱</span>Line</button>
+          <button data-tool="rectangle" aria-pressed="false" title="Rectangle (R)"><span>□</span>Box</button>
+          <button data-tool="ellipse" aria-pressed="false" title="Ellipse (O)"><span>○</span>Ellipse</button>
+          <button data-tool="text" aria-pressed="false" title="Text (T)"><span>T</span>Text</button>
+        </div>
+        <div class="divider"></div>
+        <label class="eyebrow" for="color">INK COLOR</label><div class="swatches" id="swatches"></div>
+        <label class="custom-color"><input id="color" type="color" value="#263c32">Custom color</label>
+        <label class="width-label" for="width">Stroke width <output id="width-value">5 px</output></label><input id="width" type="range" min="1" max="64" value="5">
+        <div id="text-options" hidden><label for="text">Text to place</label><input id="text" maxlength="200" value="A little spark of an idea"><small>Tap the canvas to place. Width controls font size.</small></div>
+        <div class="divider"></div><span class="eyebrow">SHARED HISTORY</span>
+        <div class="history"><button id="undo" title="Global undo (Ctrl/⌘ Z)">↶ Undo</button><button id="redo" title="Global redo (Ctrl/⌘ Shift Z)">↷ Redo</button></div>
+        <p class="hint">Undo affects the latest completed drawing from anyone.</p>
+        <button id="clear" class="subtle">Clear canvas</button>
+      </aside>
+      <div class="stage-panel">
+        <div class="stage-heading"><div><span class="eyebrow">YOUR SHARED SPACE</span><h1>Good ideas start with a mark.</h1></div><span class="paper-size">1600 × 1000</span></div>
+        <div class="canvas-wrap" id="canvas-wrap"><canvas id="drawing" width="1600" height="1000" aria-label="Shared drawing canvas. Choose a tool, then draw with a pointer or touch."></canvas><canvas id="cursors" width="1600" height="1000" aria-hidden="true"></canvas><div id="connection-overlay">Connecting to your studio…</div></div>
+        <div class="canvas-footer"><span id="tool-description">Brush · drag to draw</span><span>Made to make together.</span></div>
+      </div>
+    </section>
+    <footer><div class="file-actions"><button id="save">Save to server</button><button id="export">Export JSON</button><button id="import">Load JSON</button><button id="png">Download PNG</button><input type="file" id="file" accept=".json,application/json" hidden></div><div class="metrics" aria-label="Performance metrics"><span id="fps">— FPS</span><span id="latency">— ms RTT</span><span id="op-count">0 marks</span></div></footer>
+    <p class="save-note" id="save-note">Completed marks autosave to the server. Export JSON for a portable backup.</p>
+  </main>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <noscript>This drawing application requires JavaScript.</noscript>
+</body>
+</html>
