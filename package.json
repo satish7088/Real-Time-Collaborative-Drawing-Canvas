@@ -1,0 +1,11 @@
+{
+  "name": "flamai-collaborative-canvas",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Vanilla Canvas collaboration with an authoritative Socket.IO room server",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node server/server.js", "dev": "node --watch server/server.js", "test": "node --test test/state.test.js test/render.test.js test/integration.test.js", "test:load": "node scripts/load-test.js" },
+  "dependencies": { "socket.io": "4.8.1" },
+  "devDependencies": { "socket.io-client": "4.8.1" }
+}
