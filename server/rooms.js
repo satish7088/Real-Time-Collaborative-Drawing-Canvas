@@ -7,7 +7,7 @@ export function roomName(value) {
   return value;
 }
 export class Rooms {
-  constructor(directory, onError = console.error) { this.directory = directory; this.items = new Map(); this.loading = new Map(); this.onError = onError; }
+  constructor(directory, onError = console.error, onStatus = () => {}, storage = { writeFile, rename }) { this.directory = directory; this.items = new Map(); this.loading = new Map(); this.onError = onError; this.onStatus = onStatus; this.storage = storage; }
   async get(id) {
     roomName(id);
     if (this.items.has(id)) return this.items.get(id);
@@ -21,10 +21,11 @@ export class Rooms {
     const state = new DrawingState();
     try { state.restore(JSON.parse(await readFile(path.join(this.directory, `${id}.json`), 'utf8'))); }
     catch (error) { if (error.code !== 'ENOENT') throw new Error(`Cannot load room ${id}; existing file preserved: ${error.message}`); }
-    const room = { id, state, users: new Map(), timer: null, write: Promise.resolve(), lastUsed: Date.now(), savedAt: null };
+    const room = { id, state, users: new Map(), timer: null, write: Promise.resolve(), lastUsed: Date.now(), savedAt: null, savedSeq: state.seq, activity: [] };
     this.items.set(id, room); return room;
   }
   schedule(room) {
+    this.onStatus(room, { state: 'unsaved', seq: room.state.seq, savedSeq: room.savedSeq });
     if (room.timer) return;
     room.timer = setTimeout(() => { room.timer = null; this.save(room).catch(e => this.onError(e, room)); }, 800);
     room.timer.unref?.();
@@ -36,8 +37,15 @@ export class Rooms {
     const data = JSON.stringify(snapshot);
     const target = path.join(this.directory, `${room.id}.json`);
     room.write = room.write.catch(() => {}).then(async () => {
-      await writeFile(`${target}.tmp`, data, 'utf8'); await rename(`${target}.tmp`, target);
-      room.savedAt = new Date().toISOString();
+      this.onStatus(room, { state: 'saving', seq: snapshot.seq, savedSeq: room.savedSeq });
+      try {
+        await this.storage.writeFile(`${target}.tmp`, data, 'utf8'); await this.storage.rename(`${target}.tmp`, target);
+        room.savedAt = new Date().toISOString(); room.savedSeq = snapshot.seq;
+        this.onStatus(room, { state: 'saved', seq: snapshot.seq, savedSeq: room.savedSeq, savedAt: room.savedAt });
+      } catch (error) {
+        this.onStatus(room, { state: 'failed', seq: snapshot.seq, savedSeq: room.savedSeq });
+        throw Object.assign(error, { code: 'SAVE_FAILED' });
+      }
     });
     await room.write; return { savedAt: room.savedAt, seq: snapshot.seq };
   }

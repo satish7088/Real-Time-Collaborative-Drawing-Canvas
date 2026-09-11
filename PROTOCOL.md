@@ -1,5 +1,16 @@
 # WebSocket protocol
 
+## Version 2 extensions (document schema remains version 1)
+
+Error acknowledgements now contain `{ok:false, error, code, resync}`. Stable codes include `VALIDATION`, `NOTHING_TO_UNDO`, `NOTHING_TO_REDO`, `ACTIVE_STROKES`, `STALE_REVISION`, `SEQUENCE_GAP`, and `SAVE_FAILED`. Ordinary errors return `resync:false`. Rejected point/end commands return `resync:true`, because a streamed operation may be incomplete. Client-generated `OFFLINE`, `ACK_TIMEOUT` and `BACKPRESSURE` codes describe transport conditions; uncertain transport is closed and rejoined rather than replaying mutations.
+
+`snapshot` adds `savedSeq` and the recent `activity` list. Operations add a persisted `author` display label. Two broadcasts are added:
+
+- `save:status`: `{room,state,seq,savedSeq,savedAt?}`, with `state` in `unsaved|saving|saved|failed`. Clients compare `savedSeq` to current room revision and also account for active local/remote ink; a saved status for an earlier revision does not mean later changes are saved.
+- `activity`: `{actor,action,target,seq,at}` for successful undo, redo, clear and import. The room retains up to 20 entries in memory; activity is not persisted. It is not part of the authoritative mutation sequence.
+
+The client permits at most eight outstanding acknowledgements and 64 KiB ordinary pending command payload. A single import has a 5 MiB allowance. Excess pressure pauses drawing and reconnects. Server outbound guards close a transport at 64 queued Engine.IO packets or over 1 MiB WebSocket buffering. Snapshots remain bounded by document limits. Cursors are suppressed when four or more acknowledged commands are pending.
+
 ## Transport
 
 Socket.IO 4.x at `/socket.io/`, configured to use WebSocket only. This is **not** a raw JSON WebSocket endpoint; use a Socket.IO client. The browser client is served at `/socket.io/socket.io.js`. WebSocket-only mode simplifies deployment; a proxy that blocks upgrades will prevent connection rather than fall back to polling.
@@ -11,7 +22,7 @@ All command payloads are JSON-serializable. Normal commands return an acknowledg
 { ok: false, error: 'Human-readable reason' }
 ```
 
-The shipped client uses a 6,000 ms acknowledgement timeout and no automatic command retry. Cursor packets are volatile and have no required ack. For a command without an ack callback, the server emits a `notice` on failure. Failure codes are currently readable strings, not a versioned machine-code enum.
+The shipped client uses a 6,000 ms acknowledgement timeout and no automatic command retry. Cursor packets are volatile and have no required ack. For a command without an ack callback, the server emits a `notice` on failure. Errors now include structured codes as described above, alongside readable messages.
 
 ## Client → server
 

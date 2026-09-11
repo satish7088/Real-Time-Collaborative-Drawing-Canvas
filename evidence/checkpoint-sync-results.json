@@ -1,0 +1,131 @@
+{
+  "startedAt": "2026-09-10T17:53:16.205Z",
+  "browser": "152.0.7977.83",
+  "checks": [
+    {
+      "name": "Peer sees nonempty pixels while the other pointer is still down",
+      "passed": true
+    },
+    {
+      "name": "Two independent contexts draw overlapping strokes and converge pixel-for-pixel",
+      "passed": true
+    },
+    {
+      "name": "Eraser undo restores exact previous pixels across users",
+      "passed": true
+    },
+    {
+      "name": "Clear undo restores exact previous pixels",
+      "passed": true
+    },
+    {
+      "name": "Shared action actor is visible in activity feed",
+      "passed": true
+    },
+    {
+      "name": "Room switching isolates artwork and restores the original board",
+      "passed": true
+    },
+    {
+      "name": "JSON import replaces both boards and preserves pixels",
+      "passed": true
+    },
+    {
+      "name": "Offline peer reconnects with a fresh authoritative snapshot",
+      "passed": true
+    },
+    {
+      "name": "Nothing-to-undo and save-while-drawing preserve the active stroke",
+      "passed": true
+    },
+    {
+      "name": "Delayed acknowledgements bound outstanding commands to eight and recover by snapshot",
+      "passed": true,
+      "peakPending": 8
+    },
+    {
+      "name": "Revision-aware save indicator reaches saved",
+      "passed": true
+    },
+    {
+      "name": "Save failure is visible and retry recovers without losing artwork",
+      "passed": true
+    },
+    {
+      "name": "Native mobile touch places a mark",
+      "passed": true
+    },
+    {
+      "name": "Native touch cancellation removes unfinished mark",
+      "passed": true
+    },
+    {
+      "name": "Orientation resize and emulated pen input preserve coordinate mapping",
+      "passed": true
+    },
+    {
+      "name": "Mobile layout has no horizontal document overflow",
+      "passed": true
+    },
+    {
+      "name": "Browser benchmarks completed: 48k active points and 119.2k-point undo",
+      "passed": true
+    },
+    {
+      "name": "No browser JavaScript errors",
+      "passed": true
+    }
+  ],
+  "benchmarks": {
+    "activeOverlap": {
+      "p50Ms": 361.69999999925494,
+      "p95Ms": 391.5,
+      "samples": [
+        338.6000000014901,
+        342.6000000014901,
+        347.9000000022352,
+        351.69999999925494,
+        359.80000000074506,
+        361.69999999925494,
+        362.5,
+        365.80000000074506,
+        387.3999999985099,
+        391.5
+      ],
+      "strokes": 12,
+      "points": 48000
+    },
+    "nearCapacityUndo": {
+      "operations": 1490,
+      "points": 119200,
+      "p50Ms": 170.80000000074506,
+      "p95Ms": 288.1000000014901,
+      "samples": [
+        153.59999999776483,
+        157.19999999925494,
+        163.10000000149012,
+        163.30000000074506,
+        164,
+        165.09999999776483,
+        165.29999999701977,
+        165.69999999925494,
+        166.89999999850988,
+        169.30000000074506,
+        170.80000000074506,
+        176,
+        194.5,
+        198.30000000074506,
+        223.59999999776483,
+        248.40000000223517,
+        250.40000000223517,
+        268.8999999985099,
+        282.0999999977648,
+        288.1000000014901
+      ]
+    }
+  },
+  "limitations": [
+    "Mobile and pen inputs are emulated, not physical-device tests."
+  ],
+  "finishedAt": "2026-09-10T17:53:43.623Z"
+}

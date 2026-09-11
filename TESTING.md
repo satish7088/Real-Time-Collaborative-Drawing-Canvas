@@ -1,5 +1,15 @@
 # Testing and verification
 
+## Version 2 automated browser acceptance
+
+The shipped `test/browser.mjs` runs two independent Chromium contexts and a separate mobile context against a temporary server. It tests live pixels before release, simultaneous overlap, exact eraser/clear undo restoration, room isolation, imports, reconnect, ordinary errors during drawing, delayed acknowledgements, outbound backpressure, failed-save recovery, touch cancellation, pinch, orientation, pen input and worker/full-replay pixel equivalence. It also captures screenshots and raw stress benchmark samples.
+
+Install the optional tool with `npm install --no-save playwright@1.62.1`, then `npx playwright install chromium`, then `npm run test:browser`. For an already installed Chrome/Edge, set `BROWSER_CHANNEL=chrome` or `msedge`. An explicit `PLAYWRIGHT_MODULE` absolute path can point to a preinstalled Playwright `index.mjs`; this is how the generation environment ran the tests without a new dependency download. This option is not needed for a normal local Playwright installation.
+
+Run `node scripts/record-demo.mjs` with the same prerequisite to regenerate the 24-second WebM walkthrough and `evidence/demo.html`. It records a labeled sequence of actual screenshots from two independent sessions, rather than continuous screen capture. The optional tooling does not change the framework-free application or require a browser for `npm test`.
+
+The reliability suite now injects an atomic-rename failure, verifies the previous saved file remains intact, and confirms subsequent recovery. It also checks stable error codes and the eight-command cap. Raw evidence is included in the ZIP; emulation is explicitly distinguished from physical-device validation.
+
 ## Automated tests
 
 From the project directory:

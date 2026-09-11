@@ -1,5 +1,19 @@
 # Architecture
 
+## Version 2 additions
+
+The original ordered-history design below is retained. The following implementation details supersede the original recovery/cache descriptions where applicable:
+
+- Errors now include stable `code` and `resync` fields. Ordinary validation, empty history and save-while-drawing errors do not discard active ink. Point/end uncertainty triggers resync; acknowledgement timeouts and network pressure close the uncertain transport and reconnect for a snapshot. A rejected begin removes its local prediction.
+- Client traffic is bounded to eight outstanding acknowledged commands and 64 KiB of ordinary command payload, with one 5 MiB document allowance for import. The active point batch remains capped at 128. There is no extra unbounded send/retry queue. The server stops emitting to a peer at 64 queued Engine.IO packets or over 1 MiB of WebSocket buffering, closes its transport, and permits snapshot recovery. These guards do not constitute an OS-wide memory guarantee.
+- Completed operations retain author labels. Next-undo attribution and an ephemeral 20-entry room activity list explain undo/redo/clear/import actions. Display names remain unauthenticated labels, not security identities.
+- Revision-tagged save status broadcasts cover unsaved/saving/saved/failed. Failed write/rename preserves the previous valid snapshot; a later save can recover. Tests inject failures at the filesystem boundary and verify the browser feedback.
+- Four raster checkpoints at 100-operation boundaries allow late undo to replay only the affected suffix. Checkpoints after a changed operation are invalidated, preserving eraser/clear semantics. Each checkpoint set is bounded to approximately 25.6 MB raw pixels, excluding overhead. Main and worker renderers can each retain a set.
+- Scenes over 300 operations or 6,000 points use a module worker with OffscreenCanvas where supported. Exactly one scene/frame is in flight. New input coalesces in the latest replica. The worker completes raster work and returns a transferable ImageBitmap. Epochs discard stale frames after snapshots or synchronous paints. Worker failure falls back visibly to the compatible renderer.
+- Zoom, pan, pinch, focus view and CSS grid are view-only; coordinates and exports remain fixed. Physical mobile devices were not used; Chromium emulation covers touch, cancellation, pinch, orientation resizing and pen input.
+
+This is a worker/checkpoint implementation, not tile caching. Actual browser measurements and pixel equivalence evidence are included in **VALIDATION.md**, **UPGRADE.md** and `evidence/browser-results.json`. Heavy raster work remains expensive; neither 60 FPS at capacity nor zero UI-thread delay is claimed.
+
 ## Design goal
 
 Keep shared drawing state deterministic and reviewable without a framework or drawing library. The server owns the room's total order; clients own rendering, input and temporary prediction. Operations are vectors, not transmitted bitmap tiles.

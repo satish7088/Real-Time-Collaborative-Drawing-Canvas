@@ -1,6 +1,12 @@
-# FlamAI · Real-Time Collaborative Canvas
+# FlamAI Pro · Real-Time Collaborative Canvas
 
 A complete drawing application built with **vanilla JavaScript, HTML5 Canvas, Node.js and Socket.IO**. No frontend framework, bundler, drawing library, external font, or hosted service is required. All assets are served by the Node server.
+
+**Version 2** adds a redesigned studio, automated browser tests, structured error recovery, bounded network traffic, adaptive OffscreenCanvas rendering, raster checkpoints, zoom/pan/pinch, activity attribution and revision-aware save feedback. Read [UPGRADE.md](UPGRADE.md) for the changes and measurements. Open [evidence/demo.html](evidence/demo.html) for a 24-second labeled replay of real screenshots from two independent browser sessions.
+
+**New controls:** Pan moves the view; +/− and pinch zoom from 100–400%; Fit resets the view; Grid toggles guides; Focus hides secondary desktop panels. These view changes do not affect exported artwork. The history panel identifies the next undoable mark and shows who performed shared actions. Save status shows unsaved, saving, saved and failed states with revisions.
+
+**Browser tests (optional tooling):** install `playwright@1.62.1` with `npm install --no-save playwright@1.62.1`, then run `npx playwright install chromium` and `npm run test:browser`. Set `BROWSER_CHANNEL=chrome` or `msedge` to use an installed browser instead. Run `node scripts/record-demo.mjs` to regenerate the demo. Playwright is a test tool, not an application dependency; normal startup and `npm test` need no browser tooling. Screenshots, raw measurements and the WebM demo are in `evidence/`.
 
 ## Quick start
 
@@ -105,8 +111,8 @@ Tests use Node's built-in runner, real Socket.IO connections on ephemeral ports,
 - Up to 50 people per room and 100 loaded/loading rooms; idle empty rooms are saved and evicted after about five minutes. Saved files are not automatically deleted or globally disk-quota managed.
 - Up to 1,500 operations, 4,096 points per operation and 120,000 points per room, including hidden history. Export and use a new room at capacity. No automatic history compaction because it would remove global undo semantics.
 - Drawing pauses offline. An unfinished disconnected, canceled, timed-out, or uncertain stroke is discarded; completed acknowledged state is recovered from the server. No offline editing or exactly-once delivery guarantee is claimed.
-- The fixed logical board is 1600 × 1000 and scales to the viewport. There is no pan, zoom, infinite canvas, selection, object editing, pressure response, or image upload. Very small phone screens offer less precision.
-- Completed stable prefixes are cached, but concurrent long strokes can force suffix replay. FPS is the browser animation-loop rate, not a server throughput measure. Latency is application round-trip time, not one-way network latency.
+- The fixed logical board is 1600 × 1000, with view-only pan/zoom. There is no infinite canvas, selection, object editing, pressure response or image upload. Mobile/pen tests use Chromium emulation; physical devices remain unverified.
+- Stable prefixes and bounded checkpoints are cached. Heavy boards use a worker where supported, with a main-thread fallback. Extreme scenes still have substantial raster latency; see measured results. A worker improves responsiveness, not the amount of raster work. FPS is animation-loop rate; latency is round-trip time.
 - Logical drawing state converges. Font rasterization and edge anti-aliasing may vary across operating systems; pixel-identical screenshots are not guaranteed.
 - The token bucket and payload limits are basic application safeguards, not comprehensive abuse protection. There is no aggregate/IP connection limiter or room creation quota on disk. Put authentication, network limits, TLS and monitoring in front of any public deployment.
 - One Node writer owns a room. Do not run multiple servers against the same data directory. A Redis broadcast adapter alone would not make state mutation distributed-safe.
@@ -114,7 +120,7 @@ Tests use Node's built-in runner, real Socket.IO connections on ephemeral ports,
 
 ## Time spent
 
-Created in an AI-assisted implementation session covering design, implementation, tests and documentation. No independent time tracker was used, so a precise number of developer hours is not claimed. For an assignment requiring personal time accounting, replace this section with your own measured review, test and modification time before submission.
+This AI-assisted session included an interruption for an account usage limit. **TIME-SPENT.md** records the measured review/optimization segment and exact browser run timestamps, separately from earlier untracked work. It does not invent human developer hours. Add your own personal review/modification hours if your evaluator requires them.
 
 ## Technical documentation
 

@@ -8,7 +8,7 @@ import { ensure, point } from './drawing-state.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const palette = ['#ef6b45', '#6757d9', '#008a7e', '#b2478c', '#2373c8', '#997014', '#ce4257', '#537d39'];
-const assets = new Map([['/', ['index.html', 'text/html']], ['/style.css', ['style.css', 'text/css']], ...['canvas', 'websocket', 'main'].map(n => [`/${n}.js`, [`${n}.js`, 'text/javascript']])]);
+const assets = new Map([['/', ['index.html', 'text/html']], ...['style','pro'].map(n => [`/${n}.css`, [`${n}.css`, 'text/css']]), ...['canvas', 'websocket', 'main', 'viewport', 'render-worker'].map(n => [`/${n}.js`, [`${n}.js`, 'text/javascript']])]);
 
 export function createApp({ dataDir = process.env.DATA_DIR || path.join(here, '../data'), allowedOrigin = process.env.ALLOWED_ORIGIN } = {}) {
   const server = http.createServer(async (req, res) => {
@@ -33,9 +33,19 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(here, '.
       done(null, valid);
     }
   });
-  const rooms = new Rooms(dataDir, (error, room) => { console.error('Persistence:', error.message); if (room) io.to(room.id).emit('notice', { message: 'Disk save failed. Export JSON now; the board remains in memory.' }); });
+  const rooms = new Rooms(dataDir, (error, room) => { console.error('Persistence:', error.message); if (room) io.to(room.id).emit('notice', { message: 'Disk save failed. Export JSON now; the board remains in memory.' }); }, (room, status) => io.to(room.id).emit('save:status', { room: room.id, ...status }));
   const users = room => io.to(room.id).emit('users', [...room.users.values()]);
-  const publish = (room, event) => { io.to(room.id).emit('event', event); if (event.type !== 'points' && event.type !== 'begin') rooms.schedule(room); };
+  const publish = (room, event) => {
+    for (const id of room.users.keys()) {
+      const peer = io.sockets.sockets.get(id); if (!peer || peer.data.slow) continue;
+      const buffered = peer.conn.transport.socket?.bufferedAmount || 0;
+      if (peer.conn.writeBuffer.length >= 64 || buffered > 1024 * 1024) {
+        peer.data.slow = true; queueMicrotask(() => peer.conn.close(true)); continue;
+      }
+      peer.emit('event', event);
+    }
+    if (event.type !== 'points' && event.type !== 'begin') rooms.schedule(room);
+  };
   io.on('connection', socket => {
     let room = null, joining = false, tokens = 240, last = Date.now();
     const rate = () => { const now = Date.now(); tokens = Math.min(240, tokens + (now - last) * .12); last = now; ensure(tokens >= 1, 'Too many events; slow down'); tokens--; };
@@ -46,7 +56,7 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(here, '.
     };
     const handle = (name, fn, needsRoom = true) => socket.on(name, async (data, ack) => {
       try { rate(); if (needsRoom) ensure(room && !joining, 'Join a room first'); const result = await fn(data); if (typeof ack === 'function') ack({ ok: true, ...result }); }
-      catch (e) { if (typeof ack === 'function') ack({ ok: false, error: e.message }); else socket.emit('notice', { message: e.message }); }
+      catch (e) { const result = { ok: false, error: e.message, code: e.code || 'VALIDATION', resync: name === 'points' || name === 'end' || e.code === 'SEQUENCE_GAP' }; if (typeof ack === 'function') ack(result); else socket.emit('notice', { message: e.message, code: result.code }); }
     });
     handle('join', async raw => {
       ensure(!joining, 'Already joining'); const id = roomName(raw?.room);
@@ -58,24 +68,25 @@ export function createApp({ dataDir = process.env.DATA_DIR || path.join(here, '.
         const taken = new Set([...room.users.values()].map(u => u.color));
         const user = { id: socket.id, name: raw.name.trim(), color: palette.find(c => !taken.has(c)) || palette[room.users.size % palette.length] };
         room.users.set(socket.id, user); room.lastUsed = Date.now(); socket.join(room.id);
-        socket.emit('snapshot', { ...room.state.snapshot(), room: room.id, self: user }); users(room);
+        socket.emit('snapshot', { ...room.state.snapshot(), room: room.id, self: user, savedSeq: room.savedSeq, activity: room.activity }); users(room);
         return { room: room.id };
       } finally { joining = false; }
     }, false);
     handle('sync', () => {
       // Abandon the caller's uncertain in-flight stroke before replacing its local replica.
       for (const op of [...room.state.operations]) if (op.owner === socket.id && !op.done) publish(room, room.state.cancel(op.id, socket.id));
-      socket.emit('snapshot', { ...room.state.snapshot(), room: room.id, self: room.users.get(socket.id) }); return {};
+      socket.emit('snapshot', { ...room.state.snapshot(), room: room.id, self: room.users.get(socket.id), savedSeq: room.savedSeq, activity: room.activity }); return {};
     });
-    handle('begin', raw => { publish(room, room.state.begin(raw, socket.id)); return {}; });
+    const activity = (action, target = '') => { const entry = { actor: room.users.get(socket.id)?.name || 'Collaborator', action, target, seq: room.state.seq, at: Date.now() }; room.activity.unshift(entry); room.activity.length = Math.min(20, room.activity.length); io.to(room.id).emit('activity', entry); };
+    handle('begin', raw => { const event = room.state.begin(raw, socket.id); const author = room.users.get(socket.id).name; event.operation.author = author; room.state.operations.at(-1).author = author; publish(room, event); return {}; });
     handle('points', raw => { publish(room, room.state.append(raw, socket.id)); return {}; });
-    handle('end', raw => { publish(room, room.state.finish(raw?.id, socket.id)); return {}; });
+    handle('end', raw => { publish(room, room.state.finish(raw?.id, socket.id)); if (room.state.operations.find(o => o.id === raw.id)?.kind === 'clear') activity('cleared the canvas'); return {}; });
     handle('cancel', raw => { publish(room, room.state.cancel(raw?.id, socket.id)); return {}; });
-    handle('undo', () => { publish(room, room.state.undo()); return {}; });
-    handle('redo', () => { publish(room, room.state.redoLast()); return {}; });
+    handle('undo', () => { const event = room.state.undo(); publish(room, event); activity('undid', room.state.operations.find(o => o.id === event.id)?.author || 'Imported mark'); return {}; });
+    handle('redo', () => { const event = room.state.redoLast(); publish(room, event); activity('redid', room.state.operations.find(o => o.id === event.id)?.author || 'Imported mark'); return {}; });
     handle('cursor', raw => { socket.to(room.id).volatile.emit('cursor', { id: socket.id, point: raw === null ? null : point(raw) }); return {}; });
-    handle('save', async () => { const current = room; ensure(!current.state.operations.some(o => !o.done), 'Finish active strokes before saving'); return await rooms.save(current); });
-    handle('load', raw => { const event = room.state.importDocument(raw?.document, raw?.expectedSeq); publish(room, event); return {}; });
+    handle('save', async () => { const current = room; ensure(!current.state.operations.some(o => !o.done), 'Finish active strokes before saving', 'ACTIVE_STROKES'); return await rooms.save(current); });
+    handle('load', raw => { const event = room.state.importDocument(raw?.document, raw?.expectedSeq); publish(room, event); activity('loaded a board'); return {}; });
     handle('ping:app', () => ({ time: Date.now() }), false);
     socket.on('disconnect', leave);
   });

@@ -3,12 +3,13 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#202923"><meta name="description" content="FlamAI — a shared space to sketch, think, and create together.">
-  <title>FlamAI · Collaborative Canvas</title><link rel="stylesheet" href="/style.css">
+  <title>FlamAI Pro · Collaborative Canvas</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/pro.css">
   <script src="/socket.io/socket.io.js" defer></script><script src="/main.js" type="module"></script>
 </head>
 <body>
   <header>
-    <a class="brand" href="/" aria-label="FlamAI home"><span class="brand-icon">f.</span> Flam<span>AI</span><small>CANVAS</small></a>
+    <a class="brand" href="/" aria-label="FlamAI home"><span class="brand-icon">f.</span> Flam<span>AI</span><small>STUDIO / PRO</small></a>
+    <span class="header-caption">A space for your next big idea.</span>
     <div class="connection"><span id="status-dot"></span><span id="status" role="status">Connecting…</span></div>
     <button id="share" class="primary">Copy room link ↗</button>
   </header>
@@ -35,16 +36,20 @@
         <div id="text-options" hidden><label for="text">Text to place</label><input id="text" maxlength="200" value="A little spark of an idea"><small>Tap the canvas to place. Width controls font size.</small></div>
         <div class="divider"></div><span class="eyebrow">SHARED HISTORY</span>
         <div class="history"><button id="undo" title="Global undo (Ctrl/⌘ Z)">↶ Undo</button><button id="redo" title="Global redo (Ctrl/⌘ Shift Z)">↷ Redo</button></div>
-        <p class="hint">Undo affects the latest completed drawing from anyone.</p>
+        <p class="hint" id="next-undo">No completed marks yet</p>
+        <p class="hint">Latest = last started among completed marks. Undo is shared by everyone.</p>
         <button id="clear" class="subtle">Clear canvas</button>
       </aside>
       <div class="stage-panel">
-        <div class="stage-heading"><div><span class="eyebrow">YOUR SHARED SPACE</span><h1>Good ideas start with a mark.</h1></div><span class="paper-size">1600 × 1000</span></div>
-        <div class="canvas-wrap" id="canvas-wrap"><canvas id="drawing" width="1600" height="1000" aria-label="Shared drawing canvas. Choose a tool, then draw with a pointer or touch."></canvas><canvas id="cursors" width="1600" height="1000" aria-hidden="true"></canvas><div id="connection-overlay">Connecting to your studio…</div></div>
+        <div class="stage-heading"><div><span class="eyebrow">THE COLLABORATIVE STUDIO</span><h1>Make room for imagination.</h1></div><span class="paper-size">1600 × 1000</span></div>
+        <div class="view-toolbar" aria-label="Canvas view"><div><button id="pan" aria-pressed="false" title="Hand tool: drag to pan">✥ Pan</button><button id="grid" aria-pressed="false">Grid</button></div><div><button id="zoom-out" aria-label="Zoom out">−</button><output id="zoom-value">100%</output><button id="zoom-in" aria-label="Zoom in">+</button><button id="fit">Fit</button><button id="focus" aria-pressed="false">Focus</button></div></div>
+        <div class="viewport" id="viewport"><div class="canvas-wrap" id="canvas-wrap"><canvas id="drawing" width="1600" height="1000" aria-label="Shared drawing canvas. Choose a tool, then draw with a pointer or touch."></canvas><canvas id="cursors" width="1600" height="1000" aria-hidden="true"></canvas><div id="connection-overlay">Connecting to your studio…</div></div></div>
         <div class="canvas-footer"><span id="tool-description">Brush · drag to draw</span><span>Made to make together.</span></div>
       </div>
+      <aside class="inspector"><span class="eyebrow">STUDIO ACTIVITY</span><h2>Better, together.</h2><p class="inspector-description">Every mark is a shared possibility.</p><div class="inspector-card"><span class="card-label">LIVE HISTORY</span><ul id="activity" aria-live="polite"></ul><p class="empty-activity">Undo, redo, clear and load actions appear here.</p></div><div class="inspector-card"><span class="card-label">QUICK GUIDE</span><p><kbd>B</kbd> Brush <kbd>E</kbd> Eraser</p><p><kbd>⌘ / Ctrl Z</kbd> Shared undo</p><p>Pinch to zoom. Use Pan to move around. Escape cancels a mark.</p></div><div class="studio-note"><span>✳</span><p>Start rough.<br>Think out loud.<br>Make it yours.</p></div></aside>
     </section>
-    <footer><div class="file-actions"><button id="save">Save to server</button><button id="export">Export JSON</button><button id="import">Load JSON</button><button id="png">Download PNG</button><input type="file" id="file" accept=".json,application/json" hidden></div><div class="metrics" aria-label="Performance metrics"><span id="fps">— FPS</span><span id="latency">— ms RTT</span><span id="op-count">0 marks</span></div></footer>
+    <footer><div class="file-actions"><button id="save">Save to server</button><button id="export">Export JSON</button><button id="import">Load JSON</button><button id="png">Download PNG</button><input type="file" id="file" accept=".json,application/json" hidden></div><div class="metrics" aria-label="Performance metrics"><span id="fps">— FPS</span><span id="latency">— ms RTT</span><span id="queue">0/8 pending</span><span id="op-count">0 marks</span></div></footer>
+    <div id="save-state" role="status" data-state="saved">Connecting…</div>
     <p class="save-note" id="save-note">Completed marks autosave to the server. Export JSON for a portable backup.</p>
   </main>
   <div id="toast" role="status" aria-live="polite" hidden></div>

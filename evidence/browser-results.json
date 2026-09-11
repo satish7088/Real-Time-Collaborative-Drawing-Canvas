@@ -1,0 +1,149 @@
+{
+  "startedAt": "2026-09-10T17:58:43.834Z",
+  "browser": "152.0.7977.83",
+  "checks": [
+    {
+      "name": "Peer sees nonempty pixels while the other pointer is still down",
+      "passed": true
+    },
+    {
+      "name": "Two independent contexts draw overlapping strokes and converge pixel-for-pixel",
+      "passed": true
+    },
+    {
+      "name": "Eraser undo restores exact previous pixels across users",
+      "passed": true
+    },
+    {
+      "name": "Clear undo restores exact previous pixels",
+      "passed": true
+    },
+    {
+      "name": "Shared action actor is visible in activity feed",
+      "passed": true
+    },
+    {
+      "name": "Room switching isolates artwork and restores the original board",
+      "passed": true
+    },
+    {
+      "name": "JSON import replaces both boards and preserves pixels",
+      "passed": true
+    },
+    {
+      "name": "Offline peer reconnects with a fresh authoritative snapshot",
+      "passed": true
+    },
+    {
+      "name": "Nothing-to-undo and save-while-drawing preserve the active stroke",
+      "passed": true
+    },
+    {
+      "name": "Delayed acknowledgements bound outstanding commands to eight and recover by snapshot",
+      "passed": true,
+      "peakPending": 8
+    },
+    {
+      "name": "Server evicts an over-budget outbound connection; peer rejoins and converges",
+      "passed": true
+    },
+    {
+      "name": "Revision-aware save indicator reaches saved",
+      "passed": true
+    },
+    {
+      "name": "Save failure is visible and retry recovers without losing artwork",
+      "passed": true
+    },
+    {
+      "name": "Native mobile touch places a mark",
+      "passed": true
+    },
+    {
+      "name": "Native touch cancellation removes unfinished mark",
+      "passed": true
+    },
+    {
+      "name": "Two-finger pinch zoom cancels accidental ink and changes only the view",
+      "passed": true
+    },
+    {
+      "name": "Orientation resize and emulated pen input preserve coordinate mapping",
+      "passed": true
+    },
+    {
+      "name": "Mobile layout has no horizontal document overflow",
+      "passed": true
+    },
+    {
+      "name": "Browser benchmarks completed: 48k active points and 119.2k-point undo",
+      "passed": true
+    },
+    {
+      "name": "Worker checkpoint output matches a full main-thread pixel replay",
+      "passed": true
+    },
+    {
+      "name": "No browser JavaScript errors",
+      "passed": true
+    }
+  ],
+  "benchmarks": {
+    "renderer": "OffscreenCanvas worker + four checkpoints",
+    "workerPixelMatch": true,
+    "mainThreadHeartbeat": {
+      "ticks": 587,
+      "maxGapMs": 89.89999999850988
+    },
+    "activeOverlap": {
+      "p50Ms": 353.5,
+      "p95Ms": 399.30000000074506,
+      "samples": [
+        330.79999999701977,
+        341.3999999985099,
+        347.5,
+        348,
+        348.6000000014901,
+        353.5,
+        355.4000000022352,
+        356.19999999925494,
+        359,
+        399.30000000074506
+      ],
+      "strokes": 12,
+      "points": 48000
+    },
+    "nearCapacityUndo": {
+      "operations": 1490,
+      "points": 119200,
+      "p50Ms": 218,
+      "p95Ms": 328.5,
+      "samples": [
+        187.69999999925494,
+        194.5,
+        198.89999999850988,
+        202.09999999776483,
+        202.40000000223517,
+        206.09999999776483,
+        209.40000000223517,
+        209.5,
+        209.89999999850988,
+        212.80000000074506,
+        218,
+        218.59999999776483,
+        231.59999999776483,
+        242.19999999925494,
+        244,
+        257.1000000014901,
+        264.69999999925494,
+        268.5999999977648,
+        299.5,
+        328.5
+      ]
+    }
+  },
+  "limitations": [
+    "Mobile and pen inputs are emulated, not physical-device tests."
+  ],
+  "finishedAt": "2026-09-10T17:59:13.212Z"
+}

@@ -26,7 +26,7 @@ export class CanvasBoard {
   constructor(canvas, cursorCanvas, callbacks) {
     this.canvas = canvas; this.ctx = canvas.getContext('2d'); this.cursorCanvas = cursorCanvas; this.cursorCtx = cursorCanvas.getContext('2d'); this.callbacks = callbacks;
     this.cache = document.createElement('canvas'); this.cache.width = WIDTH; this.cache.height = HEIGHT; this.cacheCtx = this.cache.getContext('2d');
-    this.operations = []; this.byId = new Map(); this.optimistic = new Map(); this.redo = []; this.cached = 0; this.dirty = true; this.enabled = false;
+    this.operations = []; this.byId = new Map(); this.optimistic = new Map(); this.redo = []; this.cached = 0; this.checkpoints = new Map(); this.dirty = true; this.enabled = false;
     this.tool = 'brush'; this.color = '#263c32'; this.width = 5; this.text = ''; this.cursors = new Map(); this.users = new Map();
     canvas.addEventListener('pointerdown', e => this.down(e));
     canvas.addEventListener('pointermove', e => this.move(e));
@@ -36,7 +36,14 @@ export class CanvasBoard {
     canvas.addEventListener('pointerleave', () => callbacks.cursor(null));
     this.flushTimer = setInterval(() => this.flush(), 24);
     let frames = 0, t0 = performance.now();
-    const tick = now => { if (this.dirty) { this.draw(); this.dirty = false; } this.drawCursors(now); frames++;
+    this.renderTimes = [];
+    this.renderEpoch = 0; this.workerFailed = false;
+    const tick = now => { if (this.dirty) {
+      if (this.operations.length > 300 || this.operations.reduce((n,o)=>n+o.points.length,0) > 6000) {
+        if (typeof Worker !== 'undefined' && typeof OffscreenCanvas !== 'undefined' && !this.workerFailed) this.drawAsync();
+        else { this.draw(); this.dirty = false; }
+      } else { const start = performance.now(); this.draw(); this.renderTimes.push(performance.now() - start); if (this.renderTimes.length > 300) this.renderTimes.shift(); this.dirty = false; }
+    } this.drawCursors(now); frames++;
       if (now - t0 >= 1000) { callbacks.fps(Math.round(frames * 1000 / (now - t0))); frames = 0; t0 = now; } this.frame = requestAnimationFrame(tick); };
     this.frame = requestAnimationFrame(tick);
   }
@@ -76,7 +83,7 @@ export class CanvasBoard {
     if (!this.active || (e && e.pointerId !== this.active.pointerId)) return;
     if (e && this.active.op.kind !== 'text') this.addPoint(this.position(e), true);
     if (!this.active) return;
-    this.flush(); const a = this.active; this.active = null; a.op.done = true;
+    this.flush(); if (!this.active) return; const a = this.active; this.active = null; a.op.done = true;
     this.callbacks.send('end', { id: a.op.id });
     if (this.canvas.hasPointerCapture(a.pointerId)) this.canvas.releasePointerCapture(a.pointerId);
   }
@@ -84,8 +91,9 @@ export class CanvasBoard {
     if (!this.active) return;
     const id = this.active.op.id; this.active = null; this.optimistic.delete(id); this.invalidate(); this.callbacks.send('cancel', { id });
   }
-  offline() { this.enabled = false; this.active = null; this.optimistic.clear(); this.cursors.clear(); this.invalidate(); }
+  offline() { this.renderEpoch++; this.enabled = false; this.active = null; this.optimistic.clear(); this.cursors.clear(); this.invalidate(); }
   snapshot(data) {
+    this.renderEpoch++;
     this.active = null; this.optimistic.clear(); this.operations = data.operations; this.redo = data.redo;
     this.byId = new Map(this.operations.map(o => [o.id, o])); this.enabled = true; this.invalidate(); this.callbacks.changed();
   }
@@ -95,22 +103,55 @@ export class CanvasBoard {
     else if (event.type === 'points' && op) { op.points.push(...event.points); op.batch = event.batch; }
     else if (event.type === 'end' && op) { op.done = true; this.optimistic.delete(op.id); this.redo = event.redo; }
     else if (event.type === 'cancel') { this.operations = this.operations.filter(o => o.id !== event.id); this.byId.delete(event.id); this.optimistic.delete(event.id); if (this.active?.op.id === event.id) this.active = null; this.invalidate(); }
-    else if (event.type === 'visibility' && op) { op.hidden = event.hidden; this.redo = event.redo; this.invalidate(); }
+    else if (event.type === 'visibility' && op) { op.hidden = event.hidden; this.redo = event.redo; this.invalidate(this.operations.indexOf(op)); }
     else if (event.type === 'reset') this.snapshot(event.snapshot);
     this.dirty = true; this.callbacks.changed();
   }
-  invalidate() { this.cached = 0; this.cacheCtx.clearRect(0, 0, WIDTH, HEIGHT); this.dirty = true; }
+  invalidate(from = 0) {
+    // Four bounded raster checkpoints: late undo replays only the affected suffix.
+    // Checkpoints after the changed index are invalid, including eraser/clear effects.
+    for (const key of this.checkpoints.keys()) if (key > from) this.checkpoints.delete(key);
+    const prefix = Math.max(0, ...this.checkpoints.keys());
+    this.cached = prefix; this.cacheCtx.clearRect(0, 0, WIDTH, HEIGHT);
+    if (prefix) this.cacheCtx.drawImage(this.checkpoints.get(prefix), 0, 0);
+    this.dirty = true;
+  }
   draw() {
+    this.renderEpoch++; // A synchronous paint supersedes any older in-flight worker frame.
     // Cache only the immutable completed prefix. Later marks must retain begin order,
     // even when an earlier stroke is still streaming or an eraser crosses it.
     while (this.cached < this.operations.length) {
       const op = this.operations[this.cached];
       if (!op.done || this.optimistic.has(op.id)) break;
       renderOperation(this.cacheCtx, op); this.cached++;
+      if (this.cached % 100 === 0) {
+        const checkpoint = document.createElement('canvas'); checkpoint.width = WIDTH; checkpoint.height = HEIGHT;
+        checkpoint.getContext('2d').drawImage(this.cache, 0, 0); this.checkpoints.set(this.cached, checkpoint);
+        while (this.checkpoints.size > 4) this.checkpoints.delete(this.checkpoints.keys().next().value);
+      }
     }
     this.ctx.clearRect(0, 0, WIDTH, HEIGHT); this.ctx.drawImage(this.cache, 0, 0);
     for (let i = this.cached; i < this.operations.length; i++) { const op = this.operations[i]; renderOperation(this.ctx, this.optimistic.get(op.id) || op); }
     for (const [id, op] of this.optimistic) if (!this.byId.has(id)) renderOperation(this.ctx, op);
+  }
+  drawAsync() {
+    if (this.workerPending) return this.workerPending;
+    if (!this.worker) {
+      this.worker = new Worker('/render-worker.js', { type: 'module' });
+      this.worker.onmessage = ({ data }) => {
+        if (data.epoch === this.renderEpoch) { this.ctx.clearRect(0,0,WIDTH,HEIGHT); this.ctx.drawImage(data.bitmap,0,0); }
+        data.bitmap.close(); this.renderTimes.push(data.duration); if (this.renderTimes.length>300) this.renderTimes.shift();
+        const resolve = this.workerResolve; this.workerPending = null; this.workerResolve = null; resolve?.(data.duration);
+      };
+      this.worker.onerror = () => { this.workerFailed = true; this.worker.terminate(); this.worker = null; this.dirty = true; const resolve = this.workerResolve; this.workerPending = null; this.workerResolve = null; resolve?.(null); this.callbacks.error('Background renderer unavailable; using the compatible renderer.'); };
+    }
+    this.workerPending = new Promise(resolve=>this.workerResolve=resolve);
+    const operations = this.operations.map(o=>this.optimistic.get(o.id)||o);
+    for(const [id,op] of this.optimistic) if(!this.byId.has(id)) operations.push(op);
+    this.dirty = false;
+    // Exactly one frame in flight. New input stays in the replica, not a frame queue.
+    this.worker.postMessage({ operations, epoch: this.renderEpoch });
+    return this.workerPending;
   }
   drawCursors(now) {
     const ctx = this.cursorCtx; ctx.clearRect(0, 0, WIDTH, HEIGHT);

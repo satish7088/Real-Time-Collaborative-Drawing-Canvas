@@ -1,24 +1,46 @@
 import { Connection } from './websocket.js';
 import { CanvasBoard } from './canvas.js';
+import { attachViewport } from './viewport.js';
 const $ = id => document.getElementById(id);
-let toastTimer, seq = 0, self, currentRoom, syncingError = false;
+let toastTimer, seq = 0, self, currentRoom, syncingError = false, savedSeq = 0, saveState = 'saved';
 function toast(message) { $('toast').textContent = message; $('toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, 6000); }
 function preference(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch { return fallback; } }
 function remember(key, value) { try { localStorage.setItem(key, value); } catch {} }
 const connection = new Connection();
 async function send(event, data) {
   try { return await connection.request(event, data); }
-  catch (e) { if (!syncingError) { syncingError = true; toast(e.message); await connection.resync(); syncingError = false; } return null; }
+  catch (e) {
+    if (e.code !== 'OFFLINE') toast(e.message);
+    if (event === 'begin' && data?.id) { board.optimistic.delete(data.id); if (board.active?.op.id === data.id) board.active = null; board.invalidate(); }
+    if (e.resync && !syncingError) { syncingError = true; await connection.resync(); syncingError = false; }
+    return null;
+  }
 }
 const board = new CanvasBoard($('drawing'), $('cursors'), { send, cursor: p => connection.cursor(p), error: toast,
   fps: n => $('fps').textContent = `${n} FPS`, changed: () => updateHistory() });
+const viewport = attachViewport(board);
 function updateHistory() {
   $('undo').disabled = !connection.ready || !board.operations.some(o => o.done && !o.hidden);
   $('redo').disabled = !connection.ready || !board.redo.length;
   $('op-count').textContent = `${board.operations.filter(o => o.done && !o.hidden).length} marks`;
+  const next = board.operations.findLast(o => o.done && !o.hidden);
+  $('next-undo').textContent = next ? `Next: ${next.author || 'Imported'} · ${next.kind}` : 'No completed marks yet';
+  updateSave();
+}
+function updateSave() {
+  const active = board.operations.some(o => !o.done) || board.optimistic.size > 0;
+  const state = saveState === 'failed' ? 'failed' : saveState === 'saving' ? 'saving' : (seq > savedSeq || active) ? 'unsaved' : 'saved';
+  $('save-state').dataset.state = state;
+  $('save-state').textContent = `${({ unsaved: 'Unsaved changes', saving: 'Saving…', saved: 'All changes saved', failed: 'Save failed · retry' })[state]} · r${savedSeq}/${seq}`;
+}
+function showActivity(entry, prepend = true) {
+  const li = document.createElement('li'); li.textContent = `${entry.actor} ${entry.action}${entry.target ? ` ${entry.target}’s mark` : ''}`;
+  if (prepend) $('activity').prepend(li); else $('activity').append(li);
+  while ($('activity').children.length > 6) $('activity').lastChild.remove();
 }
 connection.on('snapshot', data => {
-  seq = data.seq; self = data.self; currentRoom = data.room; board.snapshot(data); $('connection-overlay').hidden = true; $('room').value = data.room;
+  seq = data.seq; savedSeq = data.savedSeq || 0; saveState = 'saved'; self = data.self; currentRoom = data.room; board.snapshot(data); $('connection-overlay').hidden = true; $('room').value = data.room;
+  $('activity').replaceChildren(); for (const entry of data.activity || []) showActivity(entry, false);
   const url = new URL(location.href); url.searchParams.set('room', data.room); history.replaceState({}, '', url);
   $('save-note').textContent = `Room “${data.room}” · completed marks autosave. Export JSON for a portable backup.`;
 });
@@ -31,6 +53,10 @@ connection.on('event', event => {
 connection.on('offline', () => { board.offline(); $('connection-overlay').hidden = false; $('connection-overlay').textContent = 'Connection paused. Waiting for a fresh board…'; updateHistory(); });
 connection.on('status', status => { $('status').textContent = status; $('status-dot').classList.toggle('online', connection.ready); updateHistory(); });
 connection.on('error', toast); connection.on('notice', data => toast(data.message));
+connection.on('pressure', message => { toast(message); $('connection-overlay').textContent = message; });
+connection.on('queue', n => $('queue').textContent = `${n}/8 pending`);
+connection.on('save:status', data => { if (data.room !== currentRoom) return; savedSeq = Math.max(savedSeq, data.savedSeq || 0); saveState = data.state; updateSave(); });
+connection.on('activity', entry => showActivity(entry));
 connection.on('latency', n => $('latency').textContent = n === null ? '— ms RTT' : `${n} ms RTT`);
 connection.on('users', list => {
   board.users = new Map(list.map(u => [u.id, u])); $('users').replaceChildren();
@@ -59,7 +85,7 @@ $('room-form').addEventListener('submit', async e => {
   finally { $('join').disabled = false; }
 });
 $('share').addEventListener('click', async () => { try { const url = new URL(location.href); url.searchParams.set('room', currentRoom || $('room').value); await navigator.clipboard.writeText(url.href); toast('Room link copied. Send it to a collaborator.'); } catch { toast('Copy the room link from your browser’s address bar.'); } });
-$('save').addEventListener('click', async () => { const result = await send('save'); if (result) { $('save-note').textContent = `Saved to server at ${new Date(result.savedAt).toLocaleTimeString()} · revision ${result.seq}`; toast('Board saved to disk.'); } });
+$('save').addEventListener('click', async () => { const result = await send('save'); if (result) { savedSeq = Math.max(savedSeq, result.seq); saveState = 'saved'; updateSave(); toast('Board saved to disk.'); } });
 function download(blob, name) { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 $('export').addEventListener('click', () => { download(new Blob([JSON.stringify(board.document())], { type: 'application/json' }), `flamai-${currentRoom || 'board'}.json`); toast('Exported completed visible marks.'); });
 $('png').addEventListener('click', async () => { const blob = await board.png(); if (blob) download(blob, `flamai-${currentRoom || 'board'}.png`); else toast('PNG export failed. Try JSON export.'); });
@@ -85,3 +111,5 @@ $('name').value = preference('flamai-name', `Guest ${Math.floor(Math.random() * 
 const requested = new URLSearchParams(location.search).get('room');
 $('room').value = /^[a-z0-9][a-z0-9_-]{0,39}$/.test(requested || '') ? requested : 'studio';
 connection.connect($('room').value, $('name').value);
+// Exports let browser tests exercise the actual modules, without shipping an admin endpoint.
+export { board, connection, send, viewport };

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 export const LIMITS = Object.freeze({ operations: 1500, points: 4096, totalPoints: 120000, batch: 128 });
 export const SIZE = Object.freeze({ width: 1600, height: 1000 });
 const kinds = new Set(['brush', 'eraser', 'line', 'rectangle', 'ellipse', 'text', 'clear']);
-export function ensure(ok, message) { if (!ok) throw new Error(message); }
+export function ensure(ok, message, code = 'VALIDATION') { if (!ok) throw Object.assign(new Error(message), { code }); }
 export function point(p) {
   ensure(p && Number.isFinite(p.x) && Number.isFinite(p.y), 'Invalid point');
   return { x: Math.round(Math.max(0, Math.min(SIZE.width, p.x)) * 10) / 10,
@@ -38,7 +38,7 @@ export class DrawingState {
   }
   append(raw, owner) {
     const op = this.owned(raw?.id, owner);
-    ensure(Number.isInteger(raw.batch) && raw.batch === op.batch + 1, 'Point batch out of sequence; resync required');
+    ensure(Number.isInteger(raw.batch) && raw.batch === op.batch + 1, 'Point batch out of sequence; resync required', 'SEQUENCE_GAP');
     ensure(Array.isArray(raw.points) && raw.points.length > 0 && raw.points.length <= LIMITS.batch, 'Invalid point batch');
     ensure(op.points.length + raw.points.length <= LIMITS.points && this.totalPoints + raw.points.length <= LIMITS.totalPoints, 'Point capacity reached; finish this stroke');
     const points = raw.points.map(point);
@@ -56,18 +56,18 @@ export class DrawingState {
   }
   undo() {
     const op = this.operations.findLast(o => o.done && !o.hidden);
-    ensure(op, 'Nothing to undo'); op.hidden = true; this.redo.push(op.id);
+    ensure(op, 'Nothing to undo', 'NOTHING_TO_UNDO'); op.hidden = true; this.redo.push(op.id);
     return this.event('visibility', { id: op.id, hidden: true, redo: [...this.redo] });
   }
   redoLast() {
-    ensure(this.redo.length, 'Nothing to redo');
+    ensure(this.redo.length, 'Nothing to redo', 'NOTHING_TO_REDO');
     const id = this.redo.pop(); this.operations.find(o => o.id === id).hidden = false;
     return this.event('visibility', { id, hidden: false, redo: [...this.redo] });
   }
   // Imported documents are a new baseline: no client-supplied ownership or sequence survives.
   importDocument(doc, expectedSeq) {
-    ensure(expectedSeq === this.seq, 'Board changed during import; review and try again');
-    ensure(!this.operations.some(o => !o.done), 'Wait until everyone finishes drawing');
+    ensure(expectedSeq === this.seq, 'Board changed during import; review and try again', 'STALE_REVISION');
+    ensure(!this.operations.some(o => !o.done), 'Wait until everyone finishes drawing', 'ACTIVE_STROKES');
     const ops = validateDocument(doc);
     this.operations = ops.map((o, i) => ({ ...o, id: randomUUID(), owner: 'import', order: i + 1, done: true, hidden: false, batch: 0 }));
     this.order = ops.length; this.redo = []; this.totalPoints = ops.reduce((n, o) => n + o.points.length, 0);
@@ -82,7 +82,7 @@ export class DrawingState {
     const ids = new Set();
     this.operations = clean.map((o, i) => {
       ensure(typeof raw[i].id === 'string' && !ids.has(raw[i].id), 'Invalid saved IDs'); ids.add(raw[i].id);
-      return { ...o, id: raw[i].id, owner: String(raw[i].owner), order: i + 1, hidden: !!raw[i].hidden, done: true, batch: 0 };
+      return { ...o, id: raw[i].id, owner: String(raw[i].owner), author: String(raw[i].author || 'Former collaborator').slice(0,32), order: i + 1, hidden: !!raw[i].hidden, done: true, batch: 0 };
     });
     this.redo = Array.isArray(saved.redo) ? [...new Set(saved.redo)].filter(id => this.operations.some(o => o.id === id && o.hidden)) : [];
     this.order = this.operations.length; this.totalPoints = clean.reduce((n, o) => n + o.points.length, 0);
